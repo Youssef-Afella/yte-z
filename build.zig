@@ -6,12 +6,14 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "yte_z",
-        .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = target, .optimize = optimize }),
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
-    //Assembly Output
-    const installAssembly = b.addInstallBinFile(exe.getEmittedAsm(), "yte_z.s");
-    b.getInstallStep().dependOn(&installAssembly.step);
+    exe.root_module.linkSystemLibrary("gdi32", .{});
 
     b.installArtifact(exe);
 
