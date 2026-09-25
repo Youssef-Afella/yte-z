@@ -19,7 +19,9 @@ pub const Win32 = struct {
 
         const hinstance = GetModuleHandleW(null);
 
+        const IDC_ARROW: windows.LPCWSTR = @ptrFromInt(32512);
         var wc = WNDCLASSEXW{
+            .hCursor = LoadCursorW(null, IDC_ARROW),
             .lpfnWndProc = wndProc,
             .hInstance = hinstance,
             .lpszClassName = window_title,
@@ -80,17 +82,21 @@ pub const Win32 = struct {
         };
     }
 
+    pub fn deinit(w: *Win32) void {
+        _ = DestroyWindow(w.hwnd);
+    }
+
     pub fn blit(w: *Win32, surface: *Surface) void {
-        var ps: PAINTSTRUCT = undefined;
-        const hdc = BeginPaint(w.hwnd, &ps).?;
+        const hdc = GetDC(w.hwnd) orelse return;
+        defer _ = ReleaseDC(w.hwnd, hdc);
+
+        const COLORONCOLOR = 3;
+        _ = SetStretchBltMode(hdc, COLORONCOLOR);
 
         const SRCCOPY = 0x00CC0020;
-
         const width: i32 = @intCast(w.window.config.width);
         const height: i32 = @intCast(w.window.config.height);
-
         _ = StretchDIBits(hdc, 0, 0, width, height, 0, 0, @intCast(surface.width), @intCast(surface.height), surface.pixels.ptr, &w.bmi, 0, SRCCOPY);
-        _ = EndPaint(w.hwnd, &ps);
     }
 
     pub fn pollEvents(w: *Win32) void {
@@ -113,10 +119,9 @@ fn wndProc(hwnd: windows.HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callcon
     const window: *Window = @ptrFromInt(@as(usize, @intCast(ptr)));
 
     const WM_DESTROY = 0x0002;
-    const WM_PAINT = 0x000F;
+    //const WM_PAINT = 0x000F;
 
     const WM_KEYDOWN = 0x0100;
-    const WM_KEYUP = 0x0101;
     const WM_SIZE = 0x0005;
 
     switch (msg) {
@@ -127,14 +132,7 @@ fn wndProc(hwnd: windows.HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callcon
             return 0;
         },
         WM_KEYDOWN => {
-            window.event_queue.push(.{ .key_down = @intCast(wparam) });
-            return 0;
-        },
-        WM_KEYUP => {
-            window.event_queue.push(.{ .key_up = @intCast(wparam) });
-            return 0;
-        },
-        WM_PAINT => {
+            window.event_queue.push(.{ .key_press = @intCast(wparam) });
             return 0;
         },
         WM_DESTROY => {
@@ -163,8 +161,14 @@ const WNDPROC = *const fn (hwnd: windows.HWND, msg: u32, wparam: WPARAM, lparam:
 
 extern "kernel32" fn GetModuleHandleW(?[*:0]const u16) callconv(.winapi) windows.HINSTANCE;
 extern "gdi32" fn StretchDIBits(hdc: windows.HDC, xDest: i32, yDest: i32, destWidth: i32, destHeight: i32, xSrc: i32, ySrc: i32, srcWidth: i32, srcHeight: i32, lpBits: ?*const anyopaque, lpBmi: *const BITMAPINFO, usage: u32, rop: u32) callconv(.winapi) i32;
-
+extern "gdi32" fn MoveToEx(hdc: windows.HDC, x: i32, y: i32, lppt: ?*anyopaque) callconv(.winapi) windows.BOOL;
+extern "gdi32" fn LineTo(hdc: windows.HDC, x: i32, y: i32) callconv(.winapi) windows.BOOL;
+extern "gdi32" fn SetStretchBltMode(hdc: ?windows.HDC, mode: i32) callconv(.winapi) i32;
+extern "user32" fn GetDC(hWnd: ?windows.HWND) callconv(.winapi) ?windows.HDC;
+extern "user32" fn ReleaseDC(hWnd: ?windows.HWND, hDC: ?windows.HDC) callconv(.winapi) i32;
+extern "user32" fn LoadCursorW(hInstance: ?windows.HINSTANCE, lpCursorName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HCURSOR;
 extern "user32" fn RegisterClassExW(*const WNDCLASSEXW) callconv(.winapi) windows.ATOM;
+extern "user32" fn DestroyWindow(windows.HWND) callconv(.winapi) windows.BOOL;
 extern "user32" fn CreateWindowExW(dwExStyle: u32, lpClassName: [*:0]const u16, lpWindowName: [*:0]const u16, dwStyle: u32, x: i32, y: i32, nWidth: i32, nHeight: i32, hWndParent: ?windows.HWND, hMenu: ?windows.HMENU, hInstance: windows.HINSTANCE, lpParam: ?*anyopaque) callconv(.winapi) ?windows.HWND;
 extern "user32" fn DefWindowProcW(windows.HWND, u32, WPARAM, LPARAM) callconv(.winapi) LRESULT;
 extern "user32" fn ShowWindow(windows.HWND, i32) callconv(.winapi) windows.BOOL;
@@ -178,4 +182,5 @@ extern "user32" fn DispatchMessageW(*const MSG) callconv(.winapi) LRESULT;
 extern "user32" fn PostQuitMessage(i32) callconv(.winapi) void;
 extern "user32" fn BeginPaint(hwnd: windows.HWND, lpPaint: *PAINTSTRUCT) callconv(.winapi) ?windows.HDC;
 extern "user32" fn EndPaint(hwnd: windows.HWND, lpPaint: *const PAINTSTRUCT) callconv(.winapi) windows.BOOL;
+extern "user32" fn InvalidateRect(hwnd: windows.HWND, lpRect: ?*RECT, bErase: windows.BOOL) callconv(.winapi) windows.BOOL;
 extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: u32, bMenu: i32, dwExStyle: u32) callconv(.winapi) i32;

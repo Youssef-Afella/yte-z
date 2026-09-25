@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = std.builtin.OptimizeMode.Debug;
+    const optimize = std.builtin.OptimizeMode.ReleaseFast;
 
     const exe = b.addExecutable(.{
         .name = "yte_z",
@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
 

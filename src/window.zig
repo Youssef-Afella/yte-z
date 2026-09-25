@@ -44,6 +44,8 @@ pub const Window = struct {
 
     pub fn deinit(w: *Window) void {
         w.event_queue.deinit();
+        w.platform.deinit();
+        w.allocator.destroy(w);
     }
 
     pub fn nextEvent(w: *Window) ?Event {

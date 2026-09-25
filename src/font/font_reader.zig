@@ -2,6 +2,12 @@ pub const FontReader = struct {
     pos: u32 = 0,
     buffer: []const u8,
 
+    pub fn init(buffer: []const u8) FontReader {
+        return .{
+            .buffer = buffer,
+        };
+    }
+
     pub fn readInt(f: *FontReader, comptime T: type) T {
         const size = @divExact(@typeInfo(T).int.bits, 8);
         const value = parseInt(T, f.buffer[f.pos..][0..size]);

@@ -1,6 +1,7 @@
 const std = @import("std");
 const Window = @import("window.zig").Window;
 const Surface = @import("surface.zig").Surface;
+const Font = @import("font/font.zig").Font;
 
 fn printn(comptime fmt: []const u8, args: anytype) void {
     std.debug.print(fmt, args);
@@ -12,42 +13,41 @@ fn print(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn main(init: std.process.Init) !void {
-    _ = init;
-
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const allocator = arena.allocator();
 
-    var window = try Window.init(allocator, .{
+    const window = try Window.init(allocator, .{
         .title = "YTE",
         .width = 1000,
-        .height = 700,
+        .height = 800,
         .resizable = true,
     });
     defer window.deinit();
 
-    var surface = try Surface.init(allocator, 1000, 700);
+    const surface = try Surface.init(allocator, window.config.width, window.config.height);
     defer surface.deinit();
 
-    const pixels = surface.pixels;
-    for (0..100) |y| {
-        for (0..100) |x| {
-            pixels[y * 1000 + x] = 0xFFFFFF00;
-        }
-    }
+    var font = try Font.init(init.io, allocator);
+    defer font.deinit();
 
-    window.presentSurface(surface);
+    try font.bakeAtlas();
 
+    surface.copyBlock(font.atlas, .{ .x = 0, .y = 0, .w = @intCast(font.atlas.width), .h = @intCast(font.atlas.height) }, .{ .x = 0, .y = 0 });
     while (!window.shouldClose()) {
         window.pollEvents();
 
         while (window.nextEvent()) |event| {
             switch (event) {
-                .key_down => |key| printn("Key Down: {}", .{key}),
-                .key_up => |key| printn("Key Up: {}", .{key}),
+                .key_press => |key| {
+                    _ = key;
+                },
                 else => {},
             }
         }
+
+        window.presentSurface(surface);
+        try std.Io.sleep(init.io, .fromMilliseconds(100), .awake);
     }
 }
