@@ -9,7 +9,7 @@ pub const Vertex = struct {
     y: i16,
 };
 
-pub fn renderGlyph(glyf: Glyf, scaling: f32, bitmap: []u8, dst: []f32, dst_width: i32) void {
+pub fn renderGlyph(glyf: Glyf, scaling: f32, bitmap: []u8, width: u32, height: u32, dst: []f32, dst_width: i32) void {
     const vertices = glyf.vertices;
     const end_points = glyf.end_points;
 
@@ -24,41 +24,66 @@ pub fn renderGlyph(glyf: Glyf, scaling: f32, bitmap: []u8, dst: []f32, dst_width
             const previous_target = if (current_contour == 0) 0 else (end_points[current_contour - 1] + 2);
             const p2 = vertices[previous_target];
 
-            drawCurve(p0, p1, p2, glyf.bounds, scaling, dst, dst_width);
+            drawCurve(p0, p1, p2, glyf.bounds, scaling, dst, dst_width, bitmap);
 
             current_contour += 1;
             continue;
         }
 
         const p2 = vertices[current_index + 2];
-        drawCurve(p0, p1, p2, glyf.bounds, scaling, dst, dst_width);
+        drawCurve(p0, p1, p2, glyf.bounds, scaling, dst, dst_width, bitmap);
     }
 
-    accumulate(bitmap, dst);
+    //_ = width;
+    //_ = height;
+    accumulate(bitmap, width, height, dst);
 }
 
-fn accumulate(bitmap: []u8, dst: []f32) void {
-    var acc: f32 = 0.0;
-    for (bitmap, dst) |*b, v| {
-        acc += v;
-        b.* = @floor(@max(0.0, @min(acc * 255.0, 255.0)));
+//Glyph g at 200px/em
+//zero: 0.5us
+//path: 14us
+//accm: 8us
+
+fn accumulate(bitmap: []u8, width: u32, height: u32, dst: []f32) void {
+    //_ = width;
+    //_ = height;
+    //
+    //var acc: f32 = 0.0;
+    //for (0..bitmap.len) |i| {
+    //    if (bitmap[i] != 0) {
+    //        acc += dst[i];
+    //    }
+    //    bitmap[i] = @intFromFloat(@max(0.0, @min(acc * 255.0, 255.0)));
+    //}
+
+    //var y: u32 = 0;
+    //
+    //while (y < height) : (y += 4) {
+    //    var acc = [4]f32{ 0, 0, 0, 0 };
+    //    for (0..width) |x| {
+    //        inline for (0..4) |i| {
+    //            const index = x + (y + i) * width;
+    //            if (bitmap[index] != 0) {
+    //                acc[i] += dst[index];
+    //            }
+    //            bitmap[index] = @intFromFloat(@max(0.0, @min(acc[i] * 255.0, 255.0)));
+    //        }
+    //    }
+    //}
+
+    for (0..height) |y| {
+        var acc: f32 = 0.0;
+        for (0..width) |x| {
+            const index = x + y * width;
+            if (bitmap[index] != 0) {
+                acc += dst[index];
+            }
+            bitmap[index] = @intFromFloat(@max(0.0, @min(acc * 255.0, 255.0)));
+        }
     }
 }
 
-fn drawCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, dst: []f32, dst_width: i32) void {
-    const valid_x = p1.x >= @min(p0.x, p2.x) and p1.x <= @max(p0.x, p2.x);
-    const valid_y = p1.y >= @min(p0.y, p2.y) and p1.y <= @max(p0.y, p2.y);
-    const horizontal = p0.y == p1.y and p1.y == p2.y;
-
-    //const ax = p0.x - 2 * p1.x + p2.x;
-    //const ay = p0.y - 2 * p1.y + p2.y;
-
-    if (!horizontal and valid_x and valid_y) {
-        rasterCurve(p0, p1, p2, bounds, scaling, dst, dst_width);
-    }
-}
-
-fn rasterCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, dst: []f32, dst_width: i32) void {
+fn drawCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, dst: []f32, dst_width: i32, bitmap: []u8) void {
     const x0: f32 = @as(f32, @floatFromInt(p0.x - bounds.x)) * scaling;
     const y0: f32 = @as(f32, @floatFromInt(p0.y - bounds.y)) * scaling;
     const x1: f32 = @as(f32, @floatFromInt(p1.x - bounds.x)) * scaling;
@@ -66,15 +91,52 @@ fn rasterCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, d
     const x2: f32 = @as(f32, @floatFromInt(p2.x - bounds.x)) * scaling;
     const y2: f32 = @as(f32, @floatFromInt(p2.y - bounds.y)) * scaling;
 
-    const ax = x0 - 2 * x1 + x2;
-    const bx = x1 - x0;
-    const ay = y0 - 2 * y1 + y2;
-    const by = y1 - y0;
+    const valid_x = p1.x >= @min(p0.x, p2.x) and p1.x <= @max(p0.x, p2.x);
+    const valid_y = p1.y >= @min(p0.y, p2.y) and p1.y <= @max(p0.y, p2.y);
+    const horizontal = p0.y == p1.y and p1.y == p2.y;
 
+    if (!horizontal and valid_x and valid_y) {
+        rasterCurve(x0, x1, x2, y0, y1, y2, dst, dst_width, bitmap);
+    }
+}
+
+fn rasterCurve(x0: f32, x1: f32, x2: f32, y0: f32, y1: f32, y2: f32, dst: []f32, dst_width: i32, bitmap: []u8) void {
     const sx: i32 = if (x2 < x0) -1 else 1;
     const sy: i32 = if (y2 < y0) -1 else 1;
     const sx_f: f32 = @floatFromInt(sx);
     const sy_f: f32 = @floatFromInt(sy);
+
+    const ax = x0 - 2 * x1 + x2;
+    const iax = 1.0 / ax;
+    const bx = x1 - x0;
+    const i2bx = 0.5 / bx;
+
+    var fx: u8 = 3;
+    if (@abs(ax) < 0.0001) {
+        if (@abs(bx) > 0.0001) {
+            fx = 0;
+        }
+    } else if (sx > 0) {
+        fx = 1;
+    } else {
+        fx = 2;
+    }
+
+    const ay = y0 - 2 * y1 + y2;
+    const iay = 1.0 / ay;
+    const by = y1 - y0;
+    const i2by = 0.5 / by;
+
+    var fy: u8 = 3;
+    if (@abs(ay) < 0.0001) {
+        if (@abs(by) > 0.0001) {
+            fy = 0;
+        }
+    } else if (sy > 0) {
+        fy = 1;
+    } else {
+        fy = 2;
+    }
 
     var plane_x: f32 = if (sx > 0) @floor(x0) + 1 else @ceil(x0) - 1;
     var plane_y: f32 = if (sy > 0) @floor(y0) + 1 else @ceil(y0) - 1;
@@ -88,8 +150,8 @@ fn rasterCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, d
     var y = y0;
 
     while (true) {
-        const tx = intersectCurve(ax, bx, x0 - plane_x, sx_f);
-        const ty = intersectCurve(ay, by, y0 - plane_y, sy_f);
+        const tx = intersectCurve(ax, iax, bx, i2bx, plane_x - x0, fx);
+        const ty = intersectCurve(ay, iay, by, i2by, plane_y - y0, fy);
         const t = @min(tx, ty);
 
         var ix: f32 = undefined;
@@ -110,8 +172,23 @@ fn rasterCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, d
         const trapzoid_right = ((x + ix) * 0.5 - plane_x + delay) * signed_height;
         const trapzoid_left = signed_height - trapzoid_right;
 
-        dst[@intCast(cell_y * dst_width + cell_x)] += trapzoid_left;
-        dst[@intCast(cell_y * dst_width + cell_x + 1)] += trapzoid_right;
+        const index: usize = @intCast(cell_y * dst_width + cell_x);
+
+        const flag0 = bitmap[index];
+        if (flag0 == 0) {
+            dst[index] = trapzoid_left;
+            bitmap[index] = 1;
+        } else {
+            dst[index] += trapzoid_left;
+        }
+
+        const flag1 = bitmap[index + 1];
+        if (flag1 == 0) {
+            dst[index + 1] = trapzoid_right;
+            bitmap[index + 1] = 1;
+        } else {
+            dst[index + 1] += trapzoid_right;
+        }
 
         if (t >= 1.0) break;
 
@@ -128,17 +205,21 @@ fn rasterCurve(p0: Vertex, p1: Vertex, p2: Vertex, bounds: Rect, scaling: f32, d
     }
 }
 
-inline fn intersectCurve(a: f32, b: f32, c: f32, s: f32) f32 {
-    if (a == 0.0) {
-        if (b == 0.0) return std.math.floatMax(f32);
-        const t = -c / (2.0 * b);
-        return if (t < 0.0 or t > 1.0) std.math.floatMax(f32) else t;
+inline fn intersectCurve(a: f32, ia: f32, b: f32, i2b: f32, c: f32, s: u8) f32 {
+    var t: f32 = std.math.floatMax(f32);
+    switch (s) {
+        0 => {
+            t = c * i2b;
+        },
+        1 => {
+            const d = b * b + a * c;
+            if (d >= 0.0) t = (-b + @sqrt(d)) * ia;
+        },
+        2 => {
+            const d = b * b + a * c;
+            if (d >= 0.0) t = (-b - @sqrt(d)) * ia;
+        },
+        else => {},
     }
-
-    const d = b * b - a * c;
-    if (d < 0.0) return std.math.floatMax(f32);
-
-    const h = @sqrt(d) * s;
-    const r = (-b + h) / a;
-    return if (r < 0.0 and r > 1.0) std.math.floatMax(f32) else r;
+    return if (t < 0.0 or t > 1.0) std.math.floatMax(f32) else t;
 }

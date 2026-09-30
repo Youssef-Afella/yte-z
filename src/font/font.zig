@@ -48,9 +48,9 @@ pub const Font = struct {
 
         const bitmap = f.allocator.alloc(u8, width * height) catch unreachable;
         const buffer = f.allocator.alloc(f32, width * height) catch unreachable;
-        @memset(buffer, 0);
+        @memset(bitmap, 0);
 
-        renderer.renderGlyph(glyf, scaling, bitmap, buffer, @intCast(width));
+        renderer.renderGlyph(glyf, scaling, bitmap, width, height, buffer, @intCast(width));
 
         f.allocator.free(buffer);
 
@@ -59,7 +59,7 @@ pub const Font = struct {
 
     pub fn bakeAtlas(f: *Font) !void {
         const char = 'g';
-        const size = 200;
+        const size = 1000;
         const iterations = 1000;
 
         const start = std.Io.Clock.now(.awake, f.io);
@@ -87,7 +87,7 @@ pub const Font = struct {
                 const c: u32 = value;
                 const color = c | (c << 8) | (c << 16);
 
-                f.atlas.setMagPixel(@intCast(x), @intCast(height - y - 1), color, 3);
+                f.atlas.setMagPixel(@intCast(x), @intCast(height - y - 1), color, 1);
             }
         }
     }
