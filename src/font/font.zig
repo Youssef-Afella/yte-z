@@ -2,31 +2,42 @@ const std = @import("std");
 
 const Bitmap = @import("../bitmap.zig").Bitmap;
 
-const FontData = @import("font_data.zig").FontData;
-const renderer = @import("font_renderer.zig");
-
 pub const Rect = struct { x: i16, y: i16, w: i16, h: i16 };
+
+const FontZy = @import("font-zy").Font;
 
 pub const Font = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
-    data: FontData,
+    renderer: FontZy,
     atlas: Bitmap,
     rects: []Rect,
+    x: i32,
+    y: i32,
+    max: i32,
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator) !Font {
-        const atlas = try Bitmap.init(allocator, 800, 800);
-        @memset(atlas.pixels, 0);
+        const font_bytes = try std.Io.Dir.cwd().readFileAlloc(
+            io,
+            "assets/JetBrainsMono-Bold.ttf",
+            allocator,
+            .limited(10 * 1024 * 1024),
+        );
 
-        //const data = try FontData.init(io, allocator, "assets/JetBrainsMono-Bold.ttf");
-        const data = try FontData.init(io, allocator, "assets/Roboto-Regular.ttf");
+        const font = try FontZy.load(font_bytes);
+
+        const atlas = try Bitmap.init(allocator, 1000, 800);
+        @memset(atlas.pixels, 0);
 
         return .{
             .io = io,
             .allocator = allocator,
-            .data = data,
+            .renderer = font,
             .atlas = atlas,
             .rects = try allocator.alloc(Rect, 300),
+            .x = 0,
+            .y = 0,
+            .max = 0,
         };
     }
 
@@ -35,59 +46,66 @@ pub const Font = struct {
         f.allocator.free(f.rects);
     }
 
-    fn renderGlyph(f: *Font, c: u8, size: f32) struct { u32, u32, []u8 } {
-        const glyf = f.data.glyfs[f.data.cmap[c]];
+    pub fn eraseChar(f: *Font) void {
+        const font = f.renderer;
+        const scale = font.scaleForPixelHeight(50);
+        const vmetrics = font.verticalMetrics(scale);
+        const hmetrics = font.glyphHorizontalMetrics(0, scale);
 
-        const scaling: f32 = size / @as(f32, @floatFromInt(f.data.unit_per_em));
+        const h: usize = @intCast(vmetrics.ascent - vmetrics.descent);
 
-        const w: f32 = @floatFromInt(glyf.bounds.w - glyf.bounds.x);
-        const h: f32 = @floatFromInt(glyf.bounds.h - glyf.bounds.y);
+        f.x -= hmetrics.advance_width;
+        if (f.x < 0) {
+            f.y -= (vmetrics.ascent - vmetrics.descent);
+            f.x += f.max;
+        }
 
-        const width: u32 = @ceil(w * scaling + 1);
-        const height: u32 = @ceil(h * scaling);
-
-        const bitmap = f.allocator.alloc(u8, width * height) catch unreachable;
-        const buffer = f.allocator.alloc(f32, width * height) catch unreachable;
-        @memset(bitmap, 0);
-
-        renderer.renderGlyph(glyf, scaling, bitmap, width, height, buffer, @intCast(width));
-
-        f.allocator.free(buffer);
-
-        return .{ width, height, bitmap };
+        for (0..h) |j| {
+            for (0..@intCast(hmetrics.advance_width)) |i| {
+                const ii: i32 = @intCast(i);
+                const jj: i32 = @intCast(j);
+                f.atlas.setPixel(@intCast(f.x + ii), @intCast(f.y + jj), 0);
+            }
+        }
     }
 
-    pub fn bakeAtlas(f: *Font) !void {
-        const char = 'g';
-        const size = 1000;
-        const iterations = 1000;
+    pub fn jumpLine(f: *Font) void {
+        const font = f.renderer;
+        const scale = font.scaleForPixelHeight(50);
+        const vmetrics = font.verticalMetrics(scale);
 
-        const start = std.Io.Clock.now(.awake, f.io);
-        for (0..iterations) |i| {
-            const width, const height, const buffer = renderGlyph(f, char, size);
-            f.allocator.free(buffer);
-            _ = width;
-            _ = height;
-            _ = i;
+        f.y += (vmetrics.ascent - vmetrics.descent);
+        f.max = f.x;
+        f.x = 0;
+    }
+
+    pub fn drawChar(f: *Font, char: u32) !void {
+        const font = f.renderer;
+        const scale = font.scaleForPixelHeight(50);
+        const vmetrics = font.verticalMetrics(scale);
+
+        const glyph = font.characterToGlyphIndex(@truncate(char));
+
+        const char_bitmap, const metrics = try font.rasterize(f.allocator, glyph, scale);
+        if (metrics.advance_width + f.x > f.atlas.width) {
+            f.y += vmetrics.ascent - vmetrics.descent;
+            f.max = f.x;
+            f.x = 0;
         }
-        const end = std.Io.Clock.now(.awake, f.io);
 
-        const duration = start.durationTo(end);
-        const fd: f32 = @floatFromInt(duration.toMicroseconds());
-        std.debug.print("\nglyph '{c}', size {}px/em, {} iterations \navg {:.3} us\n", .{ char, size, iterations, fd / iterations });
+        const cy: i32 = vmetrics.ascent + @as(i16, @intCast(metrics.ymin));
+        blit(char_bitmap, f.atlas.pixels, @intCast(f.x), @intCast(cy + f.y), metrics.width, metrics.height, f.atlas.width);
 
-        const width, const height, const buffer = renderGlyph(f, char, size);
-        std.debug.print("bitmap: {}x{} px\n", .{ width, height });
+        f.allocator.free(char_bitmap);
 
-        ///////////////////////////////////////////////////////
+        f.x += metrics.advance_width;
+    }
 
-        for (0..height) |y| {
-            for (0..width) |x| {
-                const value = buffer[x + y * width];
-                const c: u32 = value;
-                const color = c | (c << 8) | (c << 16);
-
-                f.atlas.setMagPixel(@intCast(x), @intCast(height - y - 1), color, 1);
+    fn blit(src: []u8, dst: []u32, x: u32, y: u32, w: u32, h: u32, width: u32) void {
+        for (0..h) |j| {
+            for (0..w) |i| {
+                const v: u32 = src[i + j * w];
+                dst[x + i + (y + j) * width] = v | (v << 8) | (v << 16);
             }
         }
     }

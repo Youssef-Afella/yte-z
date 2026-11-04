@@ -2,23 +2,18 @@ const std = @import("std");
 const Window = @import("window.zig").Window;
 const Surface = @import("surface.zig").Surface;
 const Font = @import("font/font.zig").Font;
-
-fn printn(comptime fmt: []const u8, args: anytype) void {
-    std.debug.print(fmt, args);
-    std.debug.print("\n", .{});
-}
-
-fn print(comptime fmt: []const u8, args: anytype) void {
-    std.debug.print(fmt, args);
-}
+const Text = @import("text.zig").Text;
 
 pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    const allocator = arena.allocator();
+    const gpa = arena.allocator();
 
-    const window = try Window.init(allocator, .{
+    var text = try Text.init(gpa, init.io, "mytext.txt");
+    defer text.deinit();
+
+    const window = try Window.init(gpa, .{
         .title = "YTE",
         .width = 1000,
         .height = 800,
@@ -26,22 +21,42 @@ pub fn main(init: std.process.Init) !void {
     });
     defer window.deinit();
 
-    const surface = try Surface.init(allocator, window.config.width, window.config.height);
+    const surface = try Surface.init(gpa, window.config.width, window.config.height);
     defer surface.deinit();
 
-    var font = try Font.init(init.io, allocator);
+    var font = try Font.init(init.io, gpa);
     defer font.deinit();
 
-    try font.bakeAtlas();
-
     surface.copyBlock(font.atlas, .{ .x = 0, .y = 0, .w = @intCast(font.atlas.width), .h = @intCast(font.atlas.height) }, .{ .x = 0, .y = 0 });
+
     while (!window.shouldClose()) {
         window.pollEvents();
 
         while (window.nextEvent()) |event| {
             switch (event) {
-                .key_press => |key| {
-                    _ = key;
+                .char => |key| {
+                    if (key == 8) {
+                        //font.eraseChar();
+                    } else if (key == 13) {
+                        //font.jumpLine();
+                        try text.save();
+                    } else {
+                        try font.drawChar(key);
+                        text.putChar(@truncate(key));
+                    }
+                },
+                .key_down => |key| {
+                    const key_right = 39;
+                    switch (key) {
+                        key_right => {
+                            text.moveCursorX(1);
+                        },
+                        else => {},
+                    }
+                },
+                .resize => |v| {
+                    _ = v;
+                    std.debug.print("Resizing\n", .{});
                 },
                 else => {},
             }

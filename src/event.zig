@@ -2,7 +2,9 @@ const std = @import("std");
 
 pub const Event = union(enum) {
     resize: struct { width: u32, height: u32 },
-    key_press: u32,
+    key_down: u32,
+    key_up: u32,
+    char: u32,
 };
 
 pub const EventQueue = struct {
