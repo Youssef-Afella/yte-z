@@ -7,8 +7,27 @@ const Platform = switch (builtin.os.tag) {
 };
 
 const Surface = @import("surface.zig").Surface;
-const Event = @import("event.zig").Event;
+
 const EventQueue = @import("event.zig").EventQueue;
+
+pub const Event = union(enum) {
+    resize: struct { width: u32, height: u32 },
+    key_down: Key,
+    key_up: Key,
+    char: u32,
+};
+
+pub const Key = enum {
+    right,
+    left,
+    up,
+    down,
+    ctrl,
+    plus,
+    minus,
+    s,
+    unknown,
+};
 
 pub const WindowConfig = struct {
     title: []const u8,

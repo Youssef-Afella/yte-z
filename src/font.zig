@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Bitmap = @import("../bitmap.zig").Bitmap;
+const Bitmap = @import("bitmap.zig").Bitmap;
 
 pub const Rect = struct { x: i16, y: i16, w: i16, h: i16 };
 
@@ -23,7 +23,6 @@ pub const Font = struct {
             allocator,
             .limited(10 * 1024 * 1024),
         );
-
         const font = try FontZy.load(font_bytes);
 
         const atlas = try Bitmap.init(allocator, 1000, 800);
@@ -77,6 +76,15 @@ pub const Font = struct {
         f.y += (vmetrics.ascent - vmetrics.descent);
         f.max = f.x;
         f.x = 0;
+    }
+
+    pub fn getChar(f: *Font, char: u32, scale: f32) !struct { []u8, i32, i32, i32 } {
+        const font = f.renderer;
+        const glyph = font.characterToGlyphIndex(@truncate(char));
+
+        const char_bitmap, const metrics = try font.rasterize(f.allocator, glyph, scale);
+
+        return .{ char_bitmap, metrics.ymin, @intCast(metrics.width), @intCast(metrics.height) };
     }
 
     pub fn drawChar(f: *Font, char: u32) !void {

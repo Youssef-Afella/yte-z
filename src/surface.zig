@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Bitmap = @import("bitmap.zig").Bitmap;
 
-const Rect = @import("font/font.zig").Rect;
+const Rect = @import("font.zig").Rect;
 const Vec2 = struct { x: u32, y: u32 };
 
 pub const Surface = struct {

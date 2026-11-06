@@ -1,2 +1,6 @@
-yelzomfrom MoroccG
-Im Youssef !
+#include <stdio.h>
+
+int main() {
+    printf("Hello !\n");
+    return 0;
+}

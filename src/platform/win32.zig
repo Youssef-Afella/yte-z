@@ -4,6 +4,7 @@ const win32 = @import("win32");
 const Window = @import("../window.zig").Window;
 const WindowConfig = @import("../window.zig").WindowConfig;
 const Surface = @import("../surface.zig").Surface;
+const Key = @import("../window.zig").Key;
 
 pub const Win32 = struct {
     hinstance: win32.HINSTANCE,
@@ -145,11 +146,33 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
             return 0;
         },
         win32.WM_KEYDOWN => {
-            window.event_queue.push(.{ .key_down = @intCast(wparam) });
+            const key: Key = switch (wparam) {
+                win32.VK_RIGHT => .right,
+                win32.VK_LEFT => .left,
+                win32.VK_UP => .up,
+                win32.VK_DOWN => .down,
+                win32.VK_CONTROL => .ctrl,
+                win32.VK_ADD => .plus,
+                win32.VK_SUBTRACT => .minus,
+                'S' => .s,
+                else => .unknown,
+            };
+            window.event_queue.push(.{ .key_down = key });
             return 0;
         },
         win32.WM_KEYUP => {
-            window.event_queue.push(.{ .key_up = @intCast(wparam) });
+            const key: Key = switch (wparam) {
+                win32.VK_RIGHT => .right,
+                win32.VK_LEFT => .left,
+                win32.VK_UP => .up,
+                win32.VK_DOWN => .down,
+                win32.VK_CONTROL => .ctrl,
+                win32.VK_ADD => .plus,
+                win32.VK_SUBTRACT => .minus,
+                'S' => .s,
+                else => .unknown,
+            };
+            window.event_queue.push(.{ .key_up = key });
             return 0;
         },
         win32.WM_DESTROY => {

@@ -1,11 +1,5 @@
 const std = @import("std");
-
-pub const Event = union(enum) {
-    resize: struct { width: u32, height: u32 },
-    key_down: u32,
-    key_up: u32,
-    char: u32,
-};
+const Event = @import("window.zig").Event;
 
 pub const EventQueue = struct {
     allocator: std.mem.Allocator,
