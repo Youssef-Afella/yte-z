@@ -4,6 +4,31 @@ const Bitmap = @import("bitmap.zig").Bitmap;
 
 pub const Rect = struct { x: i16, y: i16, w: i16, h: i16 };
 
+pub const RenderInfo = struct {
+    char: u8,
+    scale: f32,
+
+    pub const Context = struct {
+        pub fn hash(_: Context, k: RenderInfo) u64 {
+            var h = std.hash.Wyhash.init(0);
+            std.hash.autoHash(&h, k.char);
+            std.hash.autoHash(&h, @as(u32, @bitCast(k.scale)));
+            return h.final();
+        }
+
+        pub fn eql(_: Context, a: RenderInfo, b: RenderInfo) bool {
+            return a.char == b.char and a.scale == b.scale;
+        }
+    };
+};
+
+pub const CharBitmap = struct {
+    bitmap: []u8,
+    ymin: i32,
+    width: i32,
+    height: i32,
+};
+
 const FontZy = @import("font-zy").Font;
 
 pub const Font = struct {
@@ -12,14 +37,12 @@ pub const Font = struct {
     renderer: FontZy,
     atlas: Bitmap,
     rects: []Rect,
-    x: i32,
-    y: i32,
-    max: i32,
+    map: std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage),
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator) !Font {
         const font_bytes = try std.Io.Dir.cwd().readFileAlloc(
             io,
-            "assets/JetBrainsMono-Bold.ttf",
+            "fonts/JetBrainsMono/JetBrainsMono-Medium.ttf",
             allocator,
             .limited(10 * 1024 * 1024),
         );
@@ -34,9 +57,7 @@ pub const Font = struct {
             .renderer = font,
             .atlas = atlas,
             .rects = try allocator.alloc(Rect, 300),
-            .x = 0,
-            .y = 0,
-            .max = 0,
+            .map = std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage).init(allocator),
         };
     }
 
@@ -45,76 +66,29 @@ pub const Font = struct {
         f.allocator.free(f.rects);
     }
 
-    pub fn eraseChar(f: *Font) void {
-        const font = f.renderer;
-        const scale = font.scaleForPixelHeight(50);
-        const vmetrics = font.verticalMetrics(scale);
-        const hmetrics = font.glyphHorizontalMetrics(0, scale);
+    pub fn getChar(f: *Font, char: u32, scale: f32) !CharBitmap {
+        const key: RenderInfo = .{
+            .char = @truncate(char),
+            .scale = scale,
+        };
 
-        const h: usize = @intCast(vmetrics.ascent - vmetrics.descent);
-
-        f.x -= hmetrics.advance_width;
-        if (f.x < 0) {
-            f.y -= (vmetrics.ascent - vmetrics.descent);
-            f.x += f.max;
+        if (f.map.get(key)) |value| {
+            return value;
         }
 
-        for (0..h) |j| {
-            for (0..@intCast(hmetrics.advance_width)) |i| {
-                const ii: i32 = @intCast(i);
-                const jj: i32 = @intCast(j);
-                f.atlas.setPixel(@intCast(f.x + ii), @intCast(f.y + jj), 0);
-            }
-        }
-    }
-
-    pub fn jumpLine(f: *Font) void {
-        const font = f.renderer;
-        const scale = font.scaleForPixelHeight(50);
-        const vmetrics = font.verticalMetrics(scale);
-
-        f.y += (vmetrics.ascent - vmetrics.descent);
-        f.max = f.x;
-        f.x = 0;
-    }
-
-    pub fn getChar(f: *Font, char: u32, scale: f32) !struct { []u8, i32, i32, i32 } {
         const font = f.renderer;
         const glyph = font.characterToGlyphIndex(@truncate(char));
 
         const char_bitmap, const metrics = try font.rasterize(f.allocator, glyph, scale);
+        const result: CharBitmap = .{
+            .bitmap = char_bitmap,
+            .ymin = metrics.ymin,
+            .width = @intCast(metrics.width),
+            .height = @intCast(metrics.height),
+        };
 
-        return .{ char_bitmap, metrics.ymin, @intCast(metrics.width), @intCast(metrics.height) };
-    }
+        try f.map.put(key, result);
 
-    pub fn drawChar(f: *Font, char: u32) !void {
-        const font = f.renderer;
-        const scale = font.scaleForPixelHeight(50);
-        const vmetrics = font.verticalMetrics(scale);
-
-        const glyph = font.characterToGlyphIndex(@truncate(char));
-
-        const char_bitmap, const metrics = try font.rasterize(f.allocator, glyph, scale);
-        if (metrics.advance_width + f.x > f.atlas.width) {
-            f.y += vmetrics.ascent - vmetrics.descent;
-            f.max = f.x;
-            f.x = 0;
-        }
-
-        const cy: i32 = vmetrics.ascent + @as(i16, @intCast(metrics.ymin));
-        blit(char_bitmap, f.atlas.pixels, @intCast(f.x), @intCast(cy + f.y), metrics.width, metrics.height, f.atlas.width);
-
-        f.allocator.free(char_bitmap);
-
-        f.x += metrics.advance_width;
-    }
-
-    fn blit(src: []u8, dst: []u32, x: u32, y: u32, w: u32, h: u32, width: u32) void {
-        for (0..h) |j| {
-            for (0..w) |i| {
-                const v: u32 = src[i + j * w];
-                dst[x + i + (y + j) * width] = v | (v << 8) | (v << 16);
-            }
-        }
+        return result;
     }
 };

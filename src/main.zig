@@ -9,7 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var debug = std.heap.DebugAllocator(.{}){};
     const gpa = debug.allocator();
 
-    var text = try Text.init(gpa, init.io, "mytext.txt");
+    var text = try Text.init(gpa, init.io, "src/main.zig");
     defer text.deinit();
 
     const window = try Window.init(gpa, .{

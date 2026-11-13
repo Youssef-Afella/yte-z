@@ -13,7 +13,7 @@ pub const TextRenderer = struct {
             .text = text,
             .font = font,
             .target = target,
-            .scale = 0.025,
+            .scale = 0.02,
         };
     }
 
@@ -30,11 +30,15 @@ pub const TextRenderer = struct {
 
         for (r.text.lines.items) |line| {
             for (line.items) |ch| {
-                const bitmap, const ymin, const w, const h = try r.font.getChar(ch, scale);
-                defer r.font.allocator.free(bitmap);
+                const far = try r.font.getChar(ch, scale);
+                const bitmap = far.bitmap;
+                const ymin = far.ymin;
+                const w = far.width;
+                const h = far.height;
+                //defer r.font.allocator.free(bitmap);
 
                 const cy: i32 = vmetrics.ascent + @as(i16, @intCast(ymin));
-                blit(bitmap, r.target.pixels, @intCast(x), @intCast(cy + y), @intCast(w), @intCast(h), r.target.width);
+                blit(bitmap, r.target.pixels, @intCast(x), @intCast(cy + y), @intCast(w), @intCast(h), r.target.width, r.target.height);
 
                 x += width;
             }
@@ -50,13 +54,17 @@ pub const TextRenderer = struct {
                     const py = r.text.cursor_y * height + @as(i32, @intCast(j));
                     const w: i32 = @intCast(r.target.width);
 
+                    if (px + py * w >= r.target.pixels.len) continue;
+
                     r.target.pixels[@intCast(px + py * w)] = 0xFFFF0000;
                 }
             }
         }
     }
 
-    fn blit(src: []u8, dst: []u32, x: u32, y: u32, w: u32, h: u32, width: u32) void {
+    fn blit(src: []u8, dst: []u32, x: u32, y: u32, w: u32, h: u32, width: u32, height: u32) void {
+        if (x + w >= width or y + h >= height) return;
+
         for (0..h) |j| {
             for (0..w) |i| {
                 const v: u32 = src[i + j * w];

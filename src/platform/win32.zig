@@ -1,5 +1,10 @@
 const std = @import("std");
-const win32 = @import("win32");
+const builtin = @import("builtin");
+
+const win32 = switch (builtin.target.cpu.arch) {
+    .x86 => @import("win32_32_api.zig"),
+    else => @import("win32_64_api.zig"),
+};
 
 const Window = @import("../window.zig").Window;
 const WindowConfig = @import("../window.zig").WindowConfig;
