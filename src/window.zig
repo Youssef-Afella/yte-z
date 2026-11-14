@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 const Platform = switch (builtin.os.tag) {
     .windows => @import("platform/win32.zig").Win32,
+    .linux => @import("platform/x11.zig").X11,
     else => @compileError("Unsupported operating system!"),
 };
 
@@ -46,7 +47,8 @@ pub const Window = struct {
     pub fn init(allocator: std.mem.Allocator, comptime config: WindowConfig) !*Window {
         const window = try allocator.create(@This());
 
-        const platform = try Platform.init(window, config);
+        const pixels = try allocator.alloc(u8, config.width * config.height * 4);
+        const platform = try Platform.init(window, pixels.ptr, config);
 
         const event_queue = try EventQueue.init(allocator, 256);
 
