@@ -160,6 +160,10 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 win32.VK_ADD => .plus,
                 win32.VK_SUBTRACT => .minus,
                 'S' => .s,
+                'I' => .i,
+                'K' => .k,
+                'J' => .j,
+                'L' => .l,
                 else => .unknown,
             };
             window.event_queue.push(.{ .key_down = key });
@@ -175,6 +179,10 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 win32.VK_ADD => .plus,
                 win32.VK_SUBTRACT => .minus,
                 'S' => .s,
+                'I' => .i,
+                'K' => .k,
+                'J' => .j,
+                'L' => .l,
                 else => .unknown,
             };
             window.event_queue.push(.{ .key_up = key });

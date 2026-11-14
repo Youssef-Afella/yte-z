@@ -27,6 +27,10 @@ pub const Key = enum {
     plus,
     minus,
     s,
+    i,
+    k,
+    j,
+    l,
     unknown,
 };
 
@@ -47,8 +51,8 @@ pub const Window = struct {
     pub fn init(allocator: std.mem.Allocator, comptime config: WindowConfig) !*Window {
         const window = try allocator.create(@This());
 
-        const pixels = try allocator.alloc(u8, config.width * config.height * 4);
-        const platform = try Platform.init(window, pixels.ptr, config);
+        //const pixels = try allocator.alloc(u8, config.width * config.height * 4);
+        const platform = try Platform.init(window, config);
 
         const event_queue = try EventQueue.init(allocator, 256);
 

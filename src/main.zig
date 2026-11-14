@@ -62,6 +62,16 @@ pub fn main(init: std.process.Init) !void {
                                 try text.save();
                             }
                         },
+                        .i, .k => {
+                            if (modifier_state & ctrl_modifier != 0) {
+                                renderer.move(0, if (key == .k) 1 else -1);
+                            }
+                        },
+                        .j, .l => {
+                            if (modifier_state & ctrl_modifier != 0) {
+                                renderer.move(if (key == .l) 1 else -1, 0);
+                            }
+                        },
                         .plus, .minus => {
                             if (modifier_state & ctrl_modifier != 0) {
                                 renderer.scale += @as(f32, if (key == .plus) 1.0 else -1.0) * 0.01;

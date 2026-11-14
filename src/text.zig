@@ -54,8 +54,8 @@ pub const Text = struct {
     }
 
     pub fn moveCursorX(t: *Text, i: i32) void {
-        t.cursor_target_x = t.cursor_x + i;
-        t.setCursorX(t.cursor_target_x);
+        t.setCursorX(t.cursor_x + i);
+        t.cursor_target_x = t.cursor_x;
     }
 
     pub fn moveCursorY(t: *Text, i: i32) void {
