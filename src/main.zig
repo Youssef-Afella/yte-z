@@ -9,25 +9,28 @@ pub fn main(init: std.process.Init) !void {
     var debug = std.heap.DebugAllocator(.{}){};
     const gpa = debug.allocator();
 
-    var text = try Text.init(gpa, init.io, "src/main.zig");
+    const args = try init.minimal.args.toSlice(gpa);
+    if (args.len < 2) {
+        std.debug.print("Usage: yte {{path to file}}", .{});
+        return;
+    }
+
+    var text = try Text.init(gpa, init.io, args[1]);
     defer text.deinit();
 
-    const window = try Window.init(gpa, .{
+    var window = try Window.init(gpa, .{
         .title = "YTE",
         .width = 1000,
         .height = 800,
         .resizable = true,
     });
     defer window.deinit();
-
-    const surface = try Surface.init(gpa, window.config.width, window.config.height);
-    defer surface.deinit();
+    const surface = window.getSurface();
 
     var font = try Font.init(init.io, gpa);
     defer font.deinit();
 
     var renderer = TextRenderer.init(&text, &font, surface);
-    //defer renderer.deinit();
 
     var modifier_state: u8 = 0;
     const ctrl_modifier: u8 = 1 << 0;
@@ -37,7 +40,7 @@ pub fn main(init: std.process.Init) !void {
     while (!window.shouldClose()) {
         window.pollEvents();
 
-        if (window.event_queue.count != 0) rtime = @truncate(std.Io.Clock.real.now(init.io).toMilliseconds());
+        if (window.events.count != 0) rtime = @truncate(std.Io.Clock.real.now(init.io).toMilliseconds());
         while (window.nextEvent()) |event| {
             switch (event) {
                 .char => |key| {
@@ -93,11 +96,11 @@ pub fn main(init: std.process.Init) !void {
             }
         }
 
-        @memset(surface.pixels, 0);
+        surface.clear(0);
         const time: i32 = @truncate(std.Io.Clock.real.now(init.io).toMilliseconds());
         try renderer.redrawAll(time, time - rtime);
 
-        window.presentSurface(surface);
+        window.updateSurface();
         try std.Io.sleep(init.io, .fromMilliseconds(10), .awake);
     }
 }

@@ -98,13 +98,15 @@ pub const TextRenderer = struct {
         if ((time >> 9) & 1 != 0 or rtime < 400) {
             for (0..@as(u32, @intCast(height))) |j| {
                 for (0..3) |i| {
-                    const px = (r.text.cursor_x + 1) * width + @as(i32, @intCast(i));
-                    const py = r.text.cursor_y * height + @as(i32, @intCast(j));
+                    const px = (r.text.cursor_x + 1) * width + @as(i32, @intCast(i)) - r.view_x;
+                    const py = r.text.cursor_y * height + @as(i32, @intCast(j)) - r.view_y;
                     const w: i32 = @intCast(r.target.width);
 
-                    if (px + py * w >= r.target.pixels.len) continue;
+                    const p = px + py * w;
 
-                    r.target.pixels[@intCast(px + py * w)] = 0xFFFF0000;
+                    if (p >= r.target.pixels.len or p < 0) continue;
+
+                    r.target.pixels[@intCast(p)] = 0xFFFF0000;
                 }
             }
         }

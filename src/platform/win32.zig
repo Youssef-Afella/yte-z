@@ -94,12 +94,13 @@ pub const Win32 = struct {
         _ = win32.DestroyWindow(w.hwnd);
     }
 
-    pub fn blit(w: *Win32, surface: *Surface) void {
+    pub fn blit(w: *Win32) void {
         const hdc = win32.GetDC(w.hwnd) orelse return;
         defer _ = win32.ReleaseDC(w.hwnd, hdc);
 
         _ = win32.SetStretchBltMode(hdc, win32.COLORONCOLOR);
 
+        const surface = w.window.surface;
         const width: c_int = @intCast(w.window.config.width);
         const height: c_int = @intCast(w.window.config.height);
         _ = win32.StretchDIBits(
@@ -142,12 +143,12 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
         win32.WM_SIZE => {
             const w: u32 = @intCast(lparam & 0xFFFF);
             const h: u32 = @intCast((lparam >> 16) & 0xFFFF);
-            window.event_queue.push(.{ .resize = .{ .width = w, .height = h } });
+            window.events.push(.{ .resize = .{ .width = w, .height = h } });
             return 0;
         },
         win32.WM_CHAR => {
             const ch: u32 = @truncate(wparam);
-            window.event_queue.push(.{ .char = ch });
+            window.events.push(.{ .char = ch });
             return 0;
         },
         win32.WM_KEYDOWN => {
@@ -166,7 +167,7 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 'L' => .l,
                 else => .unknown,
             };
-            window.event_queue.push(.{ .key_down = key });
+            window.events.push(.{ .key_down = key });
             return 0;
         },
         win32.WM_KEYUP => {
@@ -185,7 +186,7 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 'L' => .l,
                 else => .unknown,
             };
-            window.event_queue.push(.{ .key_up = key });
+            window.events.push(.{ .key_up = key });
             return 0;
         },
         win32.WM_DESTROY => {

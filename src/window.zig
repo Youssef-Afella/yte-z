@@ -42,25 +42,26 @@ pub const WindowConfig = struct {
 };
 
 pub const Window = struct {
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     platform: Platform,
+    surface: Surface,
     config: WindowConfig,
-    event_queue: EventQueue,
+    events: EventQueue,
     should_close: bool,
 
-    pub fn init(allocator: std.mem.Allocator, comptime config: WindowConfig) !*Window {
-        const window = try allocator.create(@This());
+    pub fn init(gpa: std.mem.Allocator, comptime config: WindowConfig) !*Window {
+        const window = try gpa.create(Window);
 
-        //const pixels = try allocator.alloc(u8, config.width * config.height * 4);
+        const pixels = try gpa.alloc(u32, config.width * config.height);
         const platform = try Platform.init(window, config);
-
-        const event_queue = try EventQueue.init(allocator, 256);
+        const events = try EventQueue.init(gpa, 256);
 
         window.* = .{
-            .allocator = allocator,
+            .gpa = gpa,
             .platform = platform,
+            .surface = .{ .width = config.width, .height = config.height, .pixels = pixels },
             .config = config,
-            .event_queue = event_queue,
+            .events = events,
             .should_close = false,
         };
 
@@ -68,22 +69,26 @@ pub const Window = struct {
     }
 
     pub fn deinit(w: *Window) void {
-        w.event_queue.deinit();
+        w.events.deinit();
         w.platform.deinit();
-        w.allocator.destroy(w);
+        w.gpa.destroy(w);
+    }
+
+    pub fn getSurface(w: *Window) *Surface {
+        return &w.surface;
     }
 
     pub fn nextEvent(w: *Window) ?Event {
-        return w.event_queue.pop();
+        return w.events.pop();
     }
 
     pub fn pollEvents(w: *Window) void {
-        w.event_queue.reset();
+        w.events.reset();
         w.platform.pollEvents();
     }
 
-    pub fn presentSurface(w: *Window, surface: *Surface) void {
-        w.platform.blit(surface);
+    pub fn updateSurface(w: *Window) void {
+        w.platform.blit();
     }
 
     pub fn shouldClose(w: *Window) bool {

@@ -2,8 +2,6 @@ const std = @import("std");
 
 const Bitmap = @import("bitmap.zig").Bitmap;
 
-pub const Rect = struct { x: i16, y: i16, w: i16, h: i16 };
-
 pub const RenderInfo = struct {
     char: u8,
     scale: f32,
@@ -35,8 +33,6 @@ pub const Font = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
     renderer: FontZy,
-    atlas: Bitmap,
-    rects: []Rect,
     map: std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage),
 
     pub fn init(io: std.Io, allocator: std.mem.Allocator) !Font {
@@ -48,22 +44,16 @@ pub const Font = struct {
         );
         const font = try FontZy.load(font_bytes);
 
-        const atlas = try Bitmap.init(allocator, 1000, 800);
-        @memset(atlas.pixels, 0);
-
         return .{
             .io = io,
             .allocator = allocator,
             .renderer = font,
-            .atlas = atlas,
-            .rects = try allocator.alloc(Rect, 300),
             .map = std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage).init(allocator),
         };
     }
 
     pub fn deinit(f: *Font) void {
-        f.atlas.deinit();
-        f.allocator.free(f.rects);
+        f.map.deinit();
     }
 
     pub fn getChar(f: *Font, char: u32, scale: f32) !CharBitmap {
