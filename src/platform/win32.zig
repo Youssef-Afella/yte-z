@@ -12,29 +12,33 @@ const Surface = @import("../surface.zig").Surface;
 const Key = @import("../window.zig").Key;
 
 pub const Win32 = struct {
+    window: *Window,
+
+    //internal state
     hinstance: win32.HINSTANCE,
     hwnd: win32.HWND,
     bmi: win32.BITMAPINFO,
-    window: *Window,
+    hbm: win32.HBITMAP,
+    hdc: win32.HDC,
 
-    pub fn init(window: *Window, comptime config: WindowConfig) !Win32 {
-        const window_title = std.unicode.utf8ToUtf16LeStringLiteral(config.title);
+    pub fn init(window: *Window, title: [:0]const u8) !Win32 {
+        var surface = &window.*.surface;
 
-        const window_width: i32 = @bitCast(config.width);
-        const window_height: i32 = @bitCast(config.height);
+        const window_width: i32 = @bitCast(surface.width);
+        const window_height: i32 = @bitCast(surface.height);
 
-        const hinstance = win32.GetModuleHandleW(null);
-        const IDC_ARROW = win32.MAKEINTRESOURCEW(@as(c_int, 32512));
+        const hinstance = win32.GetModuleHandleA(null);
+        const IDC_ARROW = @as(c_int, 32512);
 
-        var wc = win32.WNDCLASSEXW{
-            .cbSize = @sizeOf(win32.WNDCLASSEXW),
-            .hCursor = win32.LoadCursorW(null, IDC_ARROW),
+        var wc = win32.WNDCLASSEXA{
+            .cbSize = @sizeOf(win32.WNDCLASSEXA),
+            .hCursor = win32.LoadCursorA(null, IDC_ARROW),
             .lpfnWndProc = wndProc,
             .hInstance = hinstance,
-            .lpszClassName = window_title,
+            .lpszClassName = title,
         };
 
-        if (win32.RegisterClassExW(&wc) == 0) {
+        if (win32.RegisterClassExA(&wc) == 0) {
             return error.RegisterClassFailed;
         }
 
@@ -55,10 +59,10 @@ pub const Win32 = struct {
         const adjusted_width = rect.right - rect.left;
         const adjusted_height = rect.bottom - rect.top;
 
-        const hwnd = win32.CreateWindowExW(
+        const hwnd = win32.CreateWindowExA(
             window_ex_style,
-            window_title,
-            window_title,
+            title,
+            title,
             window_style,
             0,
             0,
@@ -70,9 +74,7 @@ pub const Win32 = struct {
             null,
         ) orelse return error.CreateWindowFailed;
 
-        _ = win32.SetWindowLongPtrW(hwnd, win32.GWLP_USERDATA, @intCast(@intFromPtr(window)));
-        _ = win32.UpdateWindow(hwnd);
-
+        const hdc = win32.CreateCompatibleDC(0);
         const bmi = win32.BITMAPINFO{ .bmiHeader = .{
             .biSize = @sizeOf(win32.BITMAPINFOHEADER),
             .biWidth = window_width,
@@ -82,10 +84,22 @@ pub const Win32 = struct {
             .biCompression = win32.BI_RGB,
         } };
 
+        _ = win32.SetWindowLongPtrA(hwnd, win32.GWLP_USERDATA, @intCast(@intFromPtr(window)));
+        _ = win32.UpdateWindow(hwnd);
+
+        var bits: ?*anyopaque = null;
+        const hbm = win32.CreateDIBSection(0, &bmi, win32.DIB_RGB_COLORS, &bits, null, 0);
+        _ = win32.SelectObject(hdc, hbm);
+
+        const pixels: [*]u32 = @ptrCast(@alignCast(bits.?));
+        surface.pixels = pixels[0 .. surface.width * surface.height];
+
         return .{
             .hinstance = hinstance,
             .hwnd = hwnd,
             .bmi = bmi,
+            .hdc = hdc,
+            .hbm = hbm,
             .window = window,
         };
     }
@@ -95,61 +109,77 @@ pub const Win32 = struct {
     }
 
     pub fn blit(w: *Win32) void {
-        const hdc = win32.GetDC(w.hwnd) orelse return;
-        defer _ = win32.ReleaseDC(w.hwnd, hdc);
-
-        _ = win32.SetStretchBltMode(hdc, win32.COLORONCOLOR);
-
-        const surface = w.window.surface;
-        const width: c_int = @intCast(w.window.config.width);
-        const height: c_int = @intCast(w.window.config.height);
-        _ = win32.StretchDIBits(
-            hdc,
-            0,
-            0,
-            width,
-            height,
-            0,
-            0,
-            @intCast(surface.width),
-            @intCast(surface.height),
-            surface.pixels.ptr,
-            &w.bmi,
-            win32.DIB_RGB_COLORS,
-            win32.SRCCOPY,
-        );
+        _ = win32.InvalidateRect(w.hwnd, null, win32.FALSE);
+        _ = win32.UpdateWindow(w.hwnd);
     }
 
     pub fn pollEvents(w: *Win32) void {
         _ = w;
 
         var msg: win32.MSG = undefined;
-        while (win32.PeekMessageW(&msg, null, 0, 0, win32.PM_REMOVE) != 0) {
+        while (win32.PeekMessageA(&msg, null, 0, 0, win32.PM_REMOVE) != 0) {
             _ = win32.TranslateMessage(&msg);
-            _ = win32.DispatchMessageW(&msg);
+            _ = win32.DispatchMessageA(&msg);
         }
     }
 };
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARAM) callconv(.winapi) win32.LRESULT {
-    const ptr = win32.GetWindowLongPtrW(hwnd, win32.GWLP_USERDATA);
+    const ptr = win32.GetWindowLongPtrA(hwnd, win32.GWLP_USERDATA);
     if (ptr == 0) {
-        return win32.DefWindowProcW(hwnd, msg, wparam, lparam);
+        return win32.DefWindowProcA(hwnd, msg, wparam, lparam);
     }
 
-    const window: *Window = @ptrFromInt(@as(usize, @intCast(ptr)));
+    var window: *Window = @ptrFromInt(@as(usize, @intCast(ptr)));
+    var w32 = &window.platform;
+    var surface = &window.surface;
 
     switch (msg) {
+        win32.WM_DESTROY, win32.WM_QUIT => {
+            window.should_close = true;
+            win32.PostQuitMessage(0);
+        },
+        win32.WM_PAINT => {
+            var paint: win32.PAINTSTRUCT = undefined;
+            var hdc: win32.HDC = undefined;
+            hdc = win32.BeginPaint(hwnd, &paint);
+            _ = win32.BitBlt(
+                hdc,
+                paint.rcPaint.left,
+                paint.rcPaint.top,
+                paint.rcPaint.right - paint.rcPaint.left,
+                paint.rcPaint.bottom - paint.rcPaint.top,
+                w32.hdc,
+                paint.rcPaint.left,
+                paint.rcPaint.top,
+                win32.SRCCOPY,
+            );
+            _ = win32.EndPaint(hwnd, &paint);
+        },
         win32.WM_SIZE => {
-            const w: u32 = @intCast(lparam & 0xFFFF);
-            const h: u32 = @intCast((lparam >> 16) & 0xFFFF);
-            window.events.push(.{ .resize = .{ .width = w, .height = h } });
-            return 0;
+            const width: i32 = @intCast(win32.LOWORD(lparam));
+            const height: i32 = @intCast(win32.HIWORD(lparam));
+
+            w32.bmi.bmiHeader.biWidth = width;
+            w32.bmi.bmiHeader.biHeight = -height;
+
+            if (w32.hbm != null) _ = win32.DeleteObject(w32.hbm);
+
+            var bits: ?*anyopaque = null;
+            w32.hbm = win32.CreateDIBSection(0, &w32.bmi, win32.DIB_RGB_COLORS, &bits, null, 0);
+            _ = win32.SelectObject(w32.hdc, w32.hbm);
+
+            const pixels: [*]u32 = @ptrCast(@alignCast(bits.?));
+            surface.width = @intCast(width);
+            surface.height = @intCast(height);
+            surface.pixels = pixels[0 .. surface.width * surface.height];
+            //const w: u32 = @intCast(lparam & 0xFFFF);
+            //const h: u32 = @intCast((lparam >> 16) & 0xFFFF);
+            //window.events.push(.{ .resize = .{ .width = w, .height = h } });
         },
         win32.WM_CHAR => {
             const ch: u32 = @truncate(wparam);
             window.events.push(.{ .char = ch });
-            return 0;
         },
         win32.WM_KEYDOWN => {
             const key: Key = switch (wparam) {
@@ -168,7 +198,6 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 else => .unknown,
             };
             window.events.push(.{ .key_down = key });
-            return 0;
         },
         win32.WM_KEYUP => {
             const key: Key = switch (wparam) {
@@ -187,13 +216,9 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wparam: win32.WPARAM, lparam: win32.LPARA
                 else => .unknown,
             };
             window.events.push(.{ .key_up = key });
-            return 0;
         },
-        win32.WM_DESTROY => {
-            win32.PostQuitMessage(0);
-            window.should_close = true;
-            return 0;
-        },
-        else => return win32.DefWindowProcW(hwnd, msg, wparam, lparam),
+        else => return win32.DefWindowProcA(hwnd, msg, wparam, lparam),
     }
+
+    return 0;
 }

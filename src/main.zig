@@ -6,11 +6,11 @@ const Text = @import("text.zig").Text;
 const TextRenderer = @import("renderer.zig").TextRenderer;
 
 pub fn main(init: std.process.Init) !void {
-    var debug = std.heap.DebugAllocator(.{}){};
-    const gpa = debug.allocator();
+    const arena = init.arena.allocator();
+    const gpa = init.gpa;
 
-    const args = try init.minimal.args.toSlice(gpa);
-    if (args.len < 2) {
+    const args = try init.minimal.args.toSlice(arena);
+    if (args.len == 1) {
         std.debug.print("Usage: yte {{path to file}}", .{});
         return;
     }
@@ -18,16 +18,12 @@ pub fn main(init: std.process.Init) !void {
     var text = try Text.init(gpa, init.io, args[1]);
     defer text.deinit();
 
-    var window = try Window.init(gpa, .{
-        .title = "YTE",
-        .width = 1000,
-        .height = 800,
-        .resizable = true,
-    });
-    defer window.deinit();
+    var window = try Window.init(gpa, "YTE", 1000, 800);
+    defer window.deinit(gpa);
+
     const surface = window.getSurface();
 
-    var font = try Font.init(init.io, gpa);
+    var font = try Font.init(init.io, arena);
     defer font.deinit();
 
     var renderer = TextRenderer.init(&text, &font, surface);

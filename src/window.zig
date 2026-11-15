@@ -34,44 +34,33 @@ pub const Key = enum {
     unknown,
 };
 
-pub const WindowConfig = struct {
-    title: []const u8,
-    width: u32,
-    height: u32,
-    resizable: bool,
-};
-
 pub const Window = struct {
-    gpa: std.mem.Allocator,
     platform: Platform,
     surface: Surface,
-    config: WindowConfig,
     events: EventQueue,
     should_close: bool,
 
-    pub fn init(gpa: std.mem.Allocator, comptime config: WindowConfig) !*Window {
+    pub fn init(gpa: std.mem.Allocator, title: [:0]const u8, width: u32, height: u32) !*Window {
         const window = try gpa.create(Window);
-
-        const pixels = try gpa.alloc(u32, config.width * config.height);
-        const platform = try Platform.init(window, config);
         const events = try EventQueue.init(gpa, 256);
 
         window.* = .{
-            .gpa = gpa,
-            .platform = platform,
-            .surface = .{ .width = config.width, .height = config.height, .pixels = pixels },
-            .config = config,
+            .platform = undefined,
+            .surface = .{ .width = width, .height = height, .pixels = undefined },
             .events = events,
             .should_close = false,
         };
 
+        const platform = try Platform.init(window, title);
+        window.platform = platform;
+
         return window;
     }
 
-    pub fn deinit(w: *Window) void {
-        w.events.deinit();
+    pub fn deinit(w: *Window, gpa: std.mem.Allocator) void {
+        w.events.deinit(gpa);
         w.platform.deinit();
-        w.gpa.destroy(w);
+        gpa.destroy(w);
     }
 
     pub fn getSurface(w: *Window) *Surface {

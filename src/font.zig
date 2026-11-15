@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const Bitmap = @import("bitmap.zig").Bitmap;
-
 pub const RenderInfo = struct {
     char: u8,
     scale: f32,
@@ -31,29 +29,30 @@ const FontZy = @import("font-zy").Font;
 
 pub const Font = struct {
     io: std.Io,
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     renderer: FontZy,
     map: std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage),
 
-    pub fn init(io: std.Io, allocator: std.mem.Allocator) !Font {
+    pub fn init(io: std.Io, arena: std.mem.Allocator) !Font {
         const font_bytes = try std.Io.Dir.cwd().readFileAlloc(
             io,
             "fonts/JetBrainsMono/JetBrainsMono-Medium.ttf",
-            allocator,
+            arena,
             .limited(10 * 1024 * 1024),
         );
         const font = try FontZy.load(font_bytes);
 
         return .{
             .io = io,
-            .allocator = allocator,
+            .arena = arena,
             .renderer = font,
-            .map = std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage).init(allocator),
+            .map = std.HashMap(RenderInfo, CharBitmap, RenderInfo.Context, std.hash_map.default_max_load_percentage).init(arena),
         };
     }
 
     pub fn deinit(f: *Font) void {
-        f.map.deinit();
+        f.arena.free(f.renderer.font_bytes);
+        f.map.clearRetainingCapacity();
     }
 
     pub fn getChar(f: *Font, char: u32, scale: f32) !CharBitmap {
@@ -69,7 +68,7 @@ pub const Font = struct {
         const font = f.renderer;
         const glyph = font.characterToGlyphIndex(@truncate(char));
 
-        const char_bitmap, const metrics = try font.rasterize(f.allocator, glyph, scale);
+        const char_bitmap, const metrics = try font.rasterize(f.arena, glyph, scale);
         const result: CharBitmap = .{
             .bitmap = char_bitmap,
             .ymin = metrics.ymin,

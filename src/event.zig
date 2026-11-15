@@ -2,20 +2,18 @@ const std = @import("std");
 const Event = @import("window.zig").Event;
 
 pub const EventQueue = struct {
-    allocator: std.mem.Allocator,
     events: []Event,
     count: usize = 0,
     head: usize = 0,
 
-    pub fn init(allocator: std.mem.Allocator, capacity: usize) !EventQueue {
+    pub fn init(gpa: std.mem.Allocator, capacity: usize) !EventQueue {
         return .{
-            .allocator = allocator,
-            .events = try allocator.alloc(Event, capacity),
+            .events = try gpa.alloc(Event, capacity),
         };
     }
 
-    pub fn deinit(e: *EventQueue) void {
-        e.allocator.free(e.events);
+    pub fn deinit(e: *EventQueue, gpa: std.mem.Allocator) void {
+        gpa.free(e.events);
     }
 
     pub fn push(e: *EventQueue, event: Event) void {

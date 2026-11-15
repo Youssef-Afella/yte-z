@@ -87,7 +87,6 @@ pub const TextRenderer = struct {
                 const ymin = far.ymin;
                 const w = far.width;
                 const h = far.height;
-                //defer r.font.allocator.free(bitmap);
 
                 const cy: i32 = vmetrics.ascent + @as(i16, @intCast(ymin));
                 const color: Color = if (current_word % 2 == 0) .{ .r = 255, .g = 200, .b = 0, .a = 255 } else .{ .r = 255, .g = 255, .b = 255, .a = 255 };

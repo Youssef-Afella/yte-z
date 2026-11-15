@@ -48,6 +48,14 @@ pub const Text = struct {
         };
     }
 
+    pub fn deinit(t: *Text) void {
+        for (t.lines.items) |*line| {
+            line.deinit(t.gpa);
+        }
+        t.lines.deinit(t.gpa);
+        t.file.close(t.io);
+    }
+
     pub fn setCursorX(t: *Text, p: i32) void {
         const len: i32 = @intCast(t.lines.items[@intCast(t.cursor_y)].items.len);
         t.cursor_x = std.math.clamp(p, -1, len - 1);
@@ -115,9 +123,5 @@ pub const Text = struct {
         }
 
         try w.flush();
-    }
-
-    pub fn deinit(t: *Text) void {
-        t.file.close(t.io);
     }
 };
