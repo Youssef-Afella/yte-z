@@ -3,6 +3,8 @@
 // This file contains phantom declarations for missing functions in winxp's ntdll lib that zig uses.
 // Some of them are correctly emulated while others are hard/impossible to emulate with old ntdll api but they
 // are declared anyway to prevent linking errors (Thats's not safe so be carefull).
+// -----------------------------------------------------------
+// Project repo: https://github.com/Youssef-Afella/zigxp
 
 const std = @import("std");
 const windows = std.os.windows;
@@ -13,7 +15,7 @@ const RUNTIME_FUNCTION = anyopaque;
 // Replaces windows.KNONVOLATILE_CONTEXT_POINTERS since it has no direct x86 equivalent
 const KNONVOLATILE_CONTEXT_POINTERS = anyopaque;
 
-// Replaces windows.LDR.LOAD, seem to cause some compilation problems because of the struct layout? even though it's not raising it for zig std?
+// Replaces windows.LDR.LOAD, seem to cause some compilation problems because of the packed struct not having padding, even though it's not raising it for zig std?
 const LOAD = packed struct(windows.ULONG) {
     DONT_RESOLVE_DLL_REFERENCES: bool = false,
     LIBRARY_AS_DATAFILE: bool = false,
@@ -22,12 +24,14 @@ const LOAD = packed struct(windows.ULONG) {
     IGNORE_CODE_AUTHZ_LEVEL: bool = false,
     LIBRARY_AS_IMAGE_RESOURCE: bool = false,
     LIBRARY_AS_DATAFILE_EXCLUSIVE: bool = false,
-    LIBRARY_REQUERE_SIGNED_TARGET: bool = false,
+    LIBRARY_REQUIRE_SIGNED_TARGET: bool = false,
     LIBRARY_SEARCH_DLL_LOAD_DIR: bool = false,
+    LIBRARY_SEARCH_APPLICATION_DIR: bool = false,
     LIBRARY_SEARCH_USER_DIRS: bool = false,
     LIBRARY_SEARCH_SYSTEM32: bool = false,
     LIBRARY_SEARCH_DEFAULT_DIRS: bool = false,
-    _: u20 = 0,
+    LIBRARY_SAFE_CURRENT_DIRS: bool = false,
+    _: u18 = 0,
 };
 
 // ---
